@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "Midjourney Archive Downloader",
+  "name": "Custom Midjourney Archive Downloader",
   "version": "1.4.0",
   "action": {
     "default_icon": {

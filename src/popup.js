@@ -3,7 +3,7 @@ import JSZip from "jszip";
 const zips = [];
 let batchSize;
 let onlyMetadata;
-
+const waitSeconds = (s) => new Promise(resolve => setTimeout(resolve, 1000 * s));
 document.getElementById("dateForm").addEventListener("submit", async (event) => {
   event.preventDefault();
 
@@ -13,6 +13,7 @@ document.getElementById("dateForm").addEventListener("submit", async (event) => 
   batchSize = parseInt(event.target.batchSize.value);
   onlyMetadata = document.querySelector('input[name="onlyMetadata"]').checked;
 
+
   // Show progress container and hide form
   const progressContainer = document.getElementById("progressContainer");
   const progressDaysBar = document.getElementById("progressDaysBar");
@@ -21,12 +22,16 @@ document.getElementById("dateForm").addEventListener("submit", async (event) => 
   const progressJobsMessage = document.getElementById("progressJobsMessage");
   const form = document.getElementById("dateForm");
   const error = document.getElementById("error");
+  const timeRemaining = document.getElementById("timeRemaining");
   form.classList.add("hidden");
   progressContainer.classList.remove("hidden");
   error.classList.add('hidden')
 
   let processedDays = 0;
   const totalDays = Math.floor((endDate - startDate) / (1000 * 60 * 60 * 24)) + 1;
+
+  // get current time 
+  const currentTime = new Date();
 
   // Iterate through the dates and perform API calls
   for (let currentDate = startDate; currentDate <= endDate; currentDate.setDate(currentDate.getDate() + 1)) {
@@ -56,15 +61,48 @@ document.getElementById("dateForm").addEventListener("submit", async (event) => 
     // Process each item in the archive data
     for (const item of archiveData) {
       // const jobId = item.id;
+      await waitSeconds(0.01);
+      // get current time as currentTimeInLoop
+      const currentTimeInLoop = new Date();
+      // ge the difference between currentTime and currentTimeInLoop
+      const timeDifference = currentTimeInLoop - currentTime;
+
+      let estimatedTimeLeft;// = (timeDifference / processedJobs) * (totalJobs - processedJobs);
+
+      estimatedTimeLeft = estimateRemainingTime(totalJobs, processedJobs, currentTime, currentTimeInLoop);
+
+      // convert timeDifference to hours:minutes:seconds
+      const timeDifferenceInHours = Math.floor(timeDifference / 1000 / 60 / 60);
+      const timeDifferenceInMinutes = Math.floor(timeDifference / 1000 / 60) - (timeDifferenceInHours * 60);
+      const timeDifferenceInSeconds = Math.floor(timeDifference / 1000) - (timeDifferenceInMinutes * 60);
+      // display timeDifference in the console
+      console.log(`Time difference: ${timeDifferenceInHours} hours, ${timeDifferenceInMinutes} minutes, ${timeDifferenceInSeconds} seconds`);
+
+      // convert estimatedTimeLeft to hours:minutes:seconds
+      const estimatedTimeLeftInHours = Math.floor(estimatedTimeLeft / 1000 / 60 / 60);
+      const estimatedTimeLeftInMinutes = Math.floor(estimatedTimeLeft / 1000 / 60) - (estimatedTimeLeftInHours * 60);
+      const estimatedTimeLeftInSeconds = Math.floor(estimatedTimeLeft / 1000) - (estimatedTimeLeftInMinutes * 60);
+      // display estimatedTimeLeft in the console
+      console.log(`Estimated time left: ${estimatedTimeLeftInHours} hours, ${estimatedTimeLeftInMinutes} minutes, ${estimatedTimeLeftInSeconds} seconds`);
+      
       const jobId = item;
+      
       progressJobsMessage.innerText = `[${processedJobs}/${totalJobs}] Fetching ${jobId}...`;
 
+      timeRemaining.innerText = `Time remaining: ${estimatedTimeLeftInHours} hours, ${estimatedTimeLeftInMinutes} minutes, ${estimatedTimeLeftInSeconds} seconds`;
+
       // Fetch the job status data
+      console.log({jobId});
       const jobStatusResponse = await fetch("https://www.midjourney.com/api/app/job-status/", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ jobIds: [jobId] }),
+        timeout: 10000
       });
+      if(jobStatusResponse.status !== 200) {
+        console.log({jobStatusResponse});
+        continue;
+      }
       const jobStatusData = await jobStatusResponse.json();
 
       console.log(jobStatusData);
@@ -215,4 +253,23 @@ async function addExifMetadata(imageBlob, jobStatusData) {
   // Implement this function to add the required EXIF metadata to the image
   // You may use a library like "piexifjs" to manipulate the EXIF data
   return imageBlob;
+}
+
+function estimateRemainingTime(totalNumberOfItems, completedItems, startTime, lastCompletionTime) {
+  // Weight factor to give more importance to recent completion times
+  const weightFactor = 0.7;
+
+  // Calculate the average time per item for all items
+  const avgTimePerItem = (lastCompletionTime - startTime) / completedItems;
+
+  // Calculate weighted average giving more importance to recent items
+  const weightedAvgTimePerItem = avgTimePerItem * weightFactor + avgTimePerItem * (1 - weightFactor);
+  
+  // Calculate the remaining items
+  const remainingItems = totalNumberOfItems - completedItems;
+  
+  // Estimate the remaining time based on the weighted average time per item
+  const estimatedRemainingTime = weightedAvgTimePerItem * remainingItems;
+  
+  return estimatedRemainingTime;
 }
